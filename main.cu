@@ -9,69 +9,114 @@ using namespace std;
 #include <cmath>
 #include <iostream>
 #include <fstream>
+#include "functionsCpp.h"
 
-/*
-    nvcc main.cu -o out  -ccbin "C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Tools\MSVC\14.29.30133\bin\Hostx64\x64"
-    start .\out.exe
- */
 
-__global__ void solve(int* mas,int n5)
+__global__ void selectionSortCUDA(int* arr,int n)
 {
-    int i = threadIdx.x;
+    int ti = threadIdx.x;
+    int tj = threadIdx.y;
 
-    long long int counter = 0, move = 0;
+    if (ti < n - 1) {
+        int min_idx = ti;
+        if ((tj>=ti+1) && (tj < n)) {
+            if (arr[tj] < arr[min_idx]) {
+                min_idx = tj;
+            }
 
-    for (int i1 = 0; i1 < n5; i1++)
-    {
-        counter++;
-        int key = mas[i1];
-        int j = i1 - 1;
-        while (j >= 0 && key < mas[j]) {
-            mas[j + 1] = mas[j];
-            j--;
-            move++;
         }
-        mas[j + 1] = key;
+        int temp = arr[min_idx];
+        arr[min_idx] = arr[ti];
+        arr[ti] = temp;
     }
 
 
 
 }
 
+//#include "device_functions.h"
+//#include <cuda.h>
+/*
+    nvcc main.cu -o out  -ccbin "C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Tools\MSVC\14.29.30133\bin\Hostx64\x64"
+    start .\out.exe
+ */
+
+
 int main()
 {
     system("chcp 65001"); //переключаем кодировку в кириллицу
-    ofstream f("out.txt");
+    int choose = 0;
+    cin>>choose;
+    switch (choose)
+    {
+        case 1: {
+            cout << "Введите размер массива: ";
+            int n;
+            cin >> n;
+            int *mas = new int[n];
+            for (int i = 0; i < n; i++) {
+                cin >> mas[i];
+            }
+            selectionSort(mas, n);
+            for(int i=0;i<n;i++)
+            {
+                cout<<mas[i]<<" ";
+            }
+            cout<<endl;
+            break;
+        }
+        case 2: {
+            cout<<"Сортировка простым выбором: "<<endl;
+            for(int n1=pow(10,2);n1<=pow(10,6);n1*=10)
+            {
+                int *mas1 = new int[n1];
+                for (int i = 0; i < n1; i++) {
+                    mas1[i] = rand() % 100;
+                }
+                cout<<"Размер массива: "<<n1<<endl;
+                //selectionSort(mas1, n1);
+                //проверяем время работы
+                auto start = chrono::high_resolution_clock::now();
+                //запускаем функцию
+                int *cudaA = 0;
+                cudaMalloc(&cudaA, sizeof(mas1));
+                cudaMemcpy(cudaA, mas1, sizeof(mas1), cudaMemcpyHostToDevice);
+                selectionSortCUDA << < 1, n1 >> > (cudaA, n1);
+                cudaMemcpy(mas1, cudaA, n1, cudaMemcpyDeviceToHost);
+                cudaFree(cudaA);
 
-    const int n5 = 100000000;
-    int* mas = new int[n5];
+                auto finish = chrono::high_resolution_clock::now();
+                auto time = chrono::duration_cast<chrono::microseconds>(finish - start).count();
+                cout<< "Время выполнения "<<n1<<" CUDA: "<<time<<"mks"<< endl;
+                if(n1<=pow(10,6)){
+                    int* masCPU = new int[n1];
+                    for (int i = 0; i < n1; i++) {
+                        masCPU[i] = rand() % 100;
+                    }
+                    auto startCPU = chrono::high_resolution_clock::now();
 
+                    selectionSort(mas1, n1);
 
-    if (n5 != 10)cout << "Проверка на случайно сгенерированном массиве размерности: " << n5;
-    auto start_time = chrono::steady_clock::now();
+                    auto finishCPU = chrono::high_resolution_clock::now();
+                    if(n1>=pow(10,4))
+                    {
+                        auto timeCPU = chrono::duration_cast<chrono::milliseconds>(finishCPU - startCPU).count();
+                        cout << "Время выполнения " << n1 << " CPU: " << timeCPU << "ms" << endl;
+                    }else{
+                        auto timeCPU = chrono::duration_cast<chrono::microseconds>(finishCPU - startCPU).count();
+                        cout<<"Время выполнения "<<n1<<" на CPU: "<<timeCPU<<"mks"<<endl;
+                    }
+                }
+                delete[] mas1;
+            }
 
-    int* cudaA = 0;
+            break;
 
-    cudaMalloc(&cudaA, sizeof(mas));
-
-    cudaMemcpy(cudaA, mas, sizeof(mas),cudaMemcpyHostToDevice);
-
-
-
-    for (int i = 0; i < n5; i++) {
-        mas[i] = 1 + rand() % 100000;
+        }
+        default:
+            cout<<"Неверный выбор";
+            break;
     }
-
-
-
-    solve << <1, n5 >> > (cudaA,n5);
-
-    cudaMemcpy(mas, cudaA, n5, cudaMemcpyDeviceToHost);
-    auto end_time = chrono::steady_clock::now();
-    auto all_in_all = chrono::duration_cast<chrono::nanoseconds>(end_time - start_time);
-    //cout << "\nC = " << counter << " M = " << move << " C+M = " << counter + move;
-    f << "\n Time of compilation: " << double(all_in_all.count() / 1000000.0) << " ms\n\n";
-    cout << "\n Time of compilation: " << double(all_in_all.count() / 1000000.0) << " ms\n\n";
 
     system("pause");
     return 0;
